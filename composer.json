@@ -1,0 +1,17 @@
+{
+    "name": "php-feather/cache",
+    "description": "Feather Cache",
+    "type":"library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Francis Carbah",
+            "email": "afrounit@hotmail.com.com"
+        }
+    ],
+    "autoload":{
+        "psr-4":{
+            "Feather\\Cache\\":"src/"
+        }
+    }
+}
