@@ -1,2 +1,5 @@
 /nbproject/private/
 nbproject/
+vendor/
+example/*
+!example/index.php

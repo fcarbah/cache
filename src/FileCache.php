@@ -25,7 +25,7 @@ class FileCache implements Cache {
     protected $lastRead;
     private static $self;
     
-    public function __construt($sessionPath){
+    public function __construct($sessionPath){
         
         if(self::$self == null){
             
@@ -41,9 +41,11 @@ class FileCache implements Cache {
                 throw new CacheException($sessionPath.' is not a directory', 100);
             }
 
-            if(!is_writable($this->filePath)){
+            if(!is_writable($this->sessionPath)){
                 throw new CacheException($sessionPath.' is not a writeable directory', 101);
             }
+            
+            $this->init();
             
             self::$self = $this;
         }
@@ -53,7 +55,10 @@ class FileCache implements Cache {
     }
     
     public function clear() {
-        
+        $this->keys = array();
+        $this->file = array();
+        $this->write();
+        $this->lastUpdated = time();
     }
     
     public function delete($key) {
@@ -69,6 +74,8 @@ class FileCache implements Cache {
         
         $this->keys = array_values($this->keys);
         $this->file = array_values($this->file);
+        
+        $this->write();
         
         return $this;
     }
@@ -137,13 +144,15 @@ class FileCache implements Cache {
         $f = fopen($this->filePath, 'r+');
         fclose($f);
         
-        $kf = fopen(fopen($this->keysPath, 'r+'));
+        $kf = fopen($this->keysPath, 'r+');
         fclose($kf);
         
         $this->keys = file($this->keysPath);
         
-        $this->lastUpdated = time();
-        
+        if(!$this->keys){
+            $this->keys = array();
+        }
+
     }
     
     protected function readFile(){
@@ -151,8 +160,12 @@ class FileCache implements Cache {
         if($this->lastUpdated != null && $this->lastRead != null && $this->lastUpdated < $this->lastRead){
             return;
         }
-        
+
         $this->file = file($this->filePath);
+        if(!$this->file){
+           $this->file = array(); 
+        }
+        
         $this->lastRead = time();
     }
     

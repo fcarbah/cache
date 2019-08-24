@@ -26,7 +26,7 @@ class CacheObject {
         $this->data = $data;
         $this->addTime = time();
         $this->expire = intval($expireTime);
-        $this->expireTime = intval($expireTime);
+        $this->expireTime = time() + intval($expireTime);
     }
     
     public function isExpired(){
