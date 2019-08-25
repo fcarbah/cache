@@ -6,6 +6,7 @@ require '../vendor/autoload.php';
 
 use Feather\Cache\FileCache;
 use Feather\Cache\DatabaseCache;
+use Feather\Cache\RedisCache;
 
 /**
  * for database cache create a table named feather_cache
@@ -76,8 +77,30 @@ function testDbCache(){
     var_dump('dbtemp 2 should be null. cache was cleared: ',$dbCache->get('dbtemp'));
 }
 
+function testRedisCache(){
+    
+    $redisCache = RedisCache::getInstance('127.0.0.1');
+    
+    $redisCache->set('rtemp','one');
+    $redisCache->set('rtemp2','two');
+    
+    var_dump('rtemp is one: ',$redisCache->get('rtemp'));
+    var_dump('rtemp2 is two: ',$redisCache->get('rtemp2',true));
+    var_dump('rtemp3 is null. it was not set: ',$redisCache->get('rtemp3'));
+    var_dump('rtemp2 is null: ',$redisCache->get('rtemp2'));
+    
+    $redisCache->update('rtemp','ten');
+    var_dump('rtemp was updated to ten: ',$redisCache->get('rtemp'));
+    
+    $redisCache->clear();
+    var_dump('rtemp is null. cache was cleared: ',$redisCache->get('rtemp'));
+    
+}
+
 testFileCache();
 
 testDbCache();
+
+testRedisCache();
 
 

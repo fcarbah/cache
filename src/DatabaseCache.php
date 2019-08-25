@@ -29,7 +29,6 @@ class DatabaseCache implements Contracts\Cache {
             $this->config = $config;
             $this->connect();
             $this->load();
-            self::$self = $this;
         }
         catch (\Exception $e){
             throw new CacheException('Could not connect to database! '.$e->getMessage(),200);

@@ -13,5 +13,8 @@
         "psr-4":{
             "Feather\\Cache\\":"src/"
         }
+    },
+    "require": {
+        "predis/predis": "^1.1"
     }
 }
