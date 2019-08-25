@@ -7,6 +7,18 @@ require '../vendor/autoload.php';
 use Feather\Cache\FileCache;
 use Feather\Cache\DatabaseCache;
 
+/**
+ * for database cache create a table named feather_cache
+ * CREATE TABLE `feather_cache` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `cache_key` varchar(255) NOT NULL,
+  `value` mediumtext NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `cache_key` (`cache_key`)
+)
+
+ */
+
 function testFileCache(){
 
     $cache = FileCache::getInstance(dirname(__FILE__));

@@ -36,11 +36,11 @@ class FileCache implements Cache {
         $this->keysPath = $this->cachePath.'feather_cache_keys';
 
         if(!is_dir($this->cachePath)){
-            throw new CacheException($sessionPath.' is not a directory', 100);
+            throw new CacheException($cachePath.' is not a directory', 100);
         }
 
         if(!is_writable($this->cachePath)){
-            throw new CacheException($sessionPath.' is not a writeable directory', 101);
+            throw new CacheException($cachePath.' is not a writeable directory', 101);
         }
 
         $this->init();
