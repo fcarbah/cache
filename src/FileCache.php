@@ -16,7 +16,7 @@ use Feather\Cache\CacheObject;
  */
 class FileCache implements Cache {
     
-    protected $sessionPath;
+    protected $cachePath;
     protected $filePath;
     protected $keysPath;
     protected $keys;
@@ -25,40 +25,43 @@ class FileCache implements Cache {
     protected $lastRead;
     private static $self;
     
-    public function __construct($sessionPath){
-        
-        if(self::$self == null){
-            
-            $this->keys=array();
-            $this->file = array();
-            
-            $this->sessionPath = strripos($sessionPath,'/') === strlen($sessionPath)-1? $sessionPath : $sessionPath.'/';
+    private function __construct($cachePath){
 
-            $this->filePath = $this->sessionPath.'feather_cache';
-            $this->keysPath = $this->sessionPath.'feather_cache_keys';
+        $this->keys=array();
+        $this->file = array();
 
-            if(!is_dir($this->sessionPath)){
-                throw new CacheException($sessionPath.' is not a directory', 100);
-            }
+        $this->cachePath = strripos($cachePath,'/') === strlen($cachePath)-1? $cachePath : $cachePath.'/';
 
-            if(!is_writable($this->sessionPath)){
-                throw new CacheException($sessionPath.' is not a writeable directory', 101);
-            }
-            
-            $this->init();
-            
-            self::$self = $this;
+        $this->filePath = $this->cachePath.'feather_cache';
+        $this->keysPath = $this->cachePath.'feather_cache_keys';
+
+        if(!is_dir($this->cachePath)){
+            throw new CacheException($sessionPath.' is not a directory', 100);
         }
-        
-        return self::$self;
+
+        if(!is_writable($this->cachePath)){
+            throw new CacheException($sessionPath.' is not a writeable directory', 101);
+        }
+
+        $this->init();
+
+        $this->readFile();
         
     }
     
-    public function clear() {
+    public static function getInstance($cachePath){
+        if(self::$self == null){
+            self::$self = new FileCache($cachePath);
+        }
+        
+        return self::$self;
+    }
+
+        public function clear() {
         $this->keys = array();
         $this->file = array();
         $this->write();
-        $this->lastUpdated = time();
+        return true;
     }
     
     public function delete($key) {
@@ -66,7 +69,7 @@ class FileCache implements Cache {
         $index = array_search($key,$this->keys);
         
         if($index ===false){
-            return this;
+            return false;
         }
         
         unset($this->keys[$index]);
@@ -76,8 +79,8 @@ class FileCache implements Cache {
         $this->file = array_values($this->file);
         
         $this->write();
-        
-        return $this;
+
+        return true;
     }
 
     public function get($key, $remove = false) {
@@ -87,9 +90,7 @@ class FileCache implements Cache {
         if($index ===false){
             return null;
         }
-        
-        $this->readFile();
-        
+
         $obj = unserialize($this->file[$index]);
         
         if($obj->isExpired()){
@@ -110,21 +111,18 @@ class FileCache implements Cache {
         $index = array_search($key,$this->keys);
         
         if($index===false){
-            $this->readFile();
             $obj = new CacheObject($key, $value, $expires);
             $this->file[] = serialize($obj);
             $this->keys[] = $key;
             $this->write();
-            return $this;
+            return true;
         }
         
         return $this->update($key, $value);
     }
 
     public function update($key, $value) {
-        
-        $this->readFile();
-        
+
         $index = array_search($key,$this->keys);
         
         $object = unserialize($this->file[$index]);
@@ -135,7 +133,7 @@ class FileCache implements Cache {
         
         $this->write();
         
-        return $this;
+        return true;
 
     }
     
@@ -156,17 +154,12 @@ class FileCache implements Cache {
     }
     
     protected function readFile(){
-        
-        if($this->lastUpdated != null && $this->lastRead != null && $this->lastUpdated < $this->lastRead){
-            return;
-        }
 
         $this->file = file($this->filePath);
         if(!$this->file){
            $this->file = array(); 
         }
-        
-        $this->lastRead = time();
+
     }
     
     protected function write(){
@@ -176,7 +169,7 @@ class FileCache implements Cache {
 
             $keyStr = implode(PHP_EOL,$this->keys);
             file_put_contents($this->keysPath, $keyStr);
-
+            
             return true;
         }
         catch(\Exception $e){

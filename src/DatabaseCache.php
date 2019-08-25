@@ -20,60 +20,75 @@ class DatabaseCache implements Contracts\Cache {
     protected $data;
     protected $lastUpdated;
     protected $lastRead;
+    private static $self;
     
-    public function __construct($config) {
+    private function __construct($config) {
+
         try{
             $this->data = array();
             $this->config = $config;
             $this->connect();
+            $this->load();
+            self::$self = $this;
         }
         catch (\Exception $e){
             throw new CacheException('Could not connect to database! '.$e->getMessage(),200);
         }
+        
     }
 
-
+    public static function getInstance($config){
+        if(self::$self == null){
+            self::$self = new DatabaseCache($config);
+        }
+        
+        return self::$self;
+    }
     public function clear() {
         
         $this->connect();
         
-        $sql = 'delete from '.$this->table;
+        $sql = 'truncate '.$this->table;
         
         $stmt = $this->db->prepare($sql);
         
-        $stmt->execute();
-        
-        return $this;
+        if($stmt->execute()){
+            $this->data = array();
+            return true;
+        }
+
+        return false;
     }
 
     public function delete($key) {
         
         $this->connect();
         
-        $sql = 'delete from '.$this->table .' where key=:ckey';
+        $sql = 'delete from '.$this->table .' where cache_key=:ckey';
         
         $stmt = $this->db->prepare($sql);
         
-        $stmt->bindValue('ckey', $key);
+        $stmt->bindValue(':ckey', $key);
         
-        $stmt->execute();
+        if($stmt->execute()){
+            unset($this->data[$key]);
+            return true;
+        }
         
-        return $this;
+        return false;
     }
 
     public function get($key, $remove = false) {
-        
-        $this->load();
-        
-        if(!$this->data[$key]){
+
+        if(!isset($this->data[$key])){
             return null;
         }
         
+        $object =  $this->data[$key];
+
         if($remove){
             $this->delete($key);
         }
-        
-        $object =  unserialize($this->data[$key]->value);
         
         if($object->isExpired()){
             $this->delete($key);
@@ -85,58 +100,63 @@ class DatabaseCache implements Contracts\Cache {
     }
 
     public function set($key, $value, $expires = 300) {
-        
-        $this->load();
-        
-        if($this->data[$key]){
+
+        if(isset($this->data[$key])){
             return $this->update($key, $value);
         }
         
         $obj = new CacheObject($key, $value, $expires);
         
-        $sql = 'insert into '.$this->table.' (key,value) values(:key,:val)';
+        $sql = 'insert into '.$this->table.' (cache_key,value) values(:key,:val)';
         
         $stmt = $this->db->prepare($sql);
         
-        $stmt->bindValue('key', $key);
-        $stmt->bindValue('value', serialize($obj));
+        $stmt->bindValue(':key', $key);
+        $stmt->bindValue(':val', serialize($obj));
         
-        $stmt->execute();
+        if($stmt->execute()){        
+            $this->setData($key, $obj);        
+            return true;
+        }
         
-        $this->lastUpdated = time();
-        
-        return true;
+        return false;
     }
 
     public function update($key, $value) {
-        
-        $this->load();
-        
-        $data = $this->data[$key];
+
+        $data = isset($this->data[$key])? $this->data[$key] : null;
         
         if(!$data){
-            return this;
+            return false;
         }
         
-        $sql = 'update '.$this->table. 'set value=:val where key=:ckey';
+        $sql = 'update '.$this->table. ' set value=:val where cache_key=:key';
+        
+        $obj = $data;
+
+        $updObj = new CacheObject($key, $value, $obj->expire);
         
         $stmt = $this->db->prepare($sql);
         
-        $stmt->bindValue('key', $key);
-        $stmt->bindValue('value', serialize($value));
+        $stmt->bindValue(':key', $key);
+        $stmt->bindValue(':val', serialize($updObj));
         
-        $stmt->execute();
+        if($stmt->execute()){        
+            $this->setData($key, $updObj);        
+            return true;
+        }
         
-        $this->lastUpdated = time();
-        
-        return $this;
+        return false;
+    }
+
+    protected function connect(){
+        if(!$this->db){
+            $this->db= new \PDO($this->config['dsn'], $this->config['user'], $this->config['password']);
+            $this->db->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+        }
     }
     
     protected function load(){
-        
-        if($this->lastUpdated != null && $this->lastRead != null && $this->lastUpdated < $this->lastRead){
-            return;
-        }
         
         $this->connect();
         
@@ -146,19 +166,16 @@ class DatabaseCache implements Contracts\Cache {
         
         $stmt->execute();
         
-        foreach($stmt->fetchAll() as $row){
-            $this->data[$row['key']] = $row;
+        $data = $stmt->fetchAll(\PDO::FETCH_ASSOC); 
+
+        foreach($data as $row){
+            $this->data[$row['cache_key']] = unserialize($row['value']);
         }
-        
-        $this->lastRead = time();
+
     }
     
-    protected function connect(){
-        if(!$this->db){
-            $this->db= new \PDO($this->config['dsn'], $this->config['user'], $this->config['password']);
-        }
+    protected function setData($key,$object){
+        $this->data[$key] = $object;
     }
-    
-    
 
 }
