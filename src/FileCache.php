@@ -139,10 +139,10 @@ class FileCache implements Cache {
     
     protected function init(){
         
-        $f = fopen($this->filePath, 'w+');
+        $f = fopen($this->filePath, 'a+');
         fclose($f);
         
-        $kf = fopen($this->keysPath, 'w+');
+        $kf = fopen($this->keysPath, 'a+');
         fclose($kf);
         
         $this->keys = file($this->keysPath);
