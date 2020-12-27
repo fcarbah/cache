@@ -50,11 +50,11 @@ class FileCache implements Cache {
     }
     
     public static function getInstance($cachePath){
-        if(self::$self == null){
-            self::$self = new FileCache($cachePath);
+        if(static::$self == null){
+            static::$self = new FileCache($cachePath);
         }
         
-        return self::$self;
+        return static::$self;
     }
 
         public function clear() {

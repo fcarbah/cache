@@ -37,11 +37,11 @@ class DatabaseCache implements Contracts\Cache {
     }
 
     public static function getInstance($config){
-        if(self::$self == null){
-            self::$self = new DatabaseCache($config);
+        if(static::$self == null){
+            static::$self = new DatabaseCache($config);
         }
         
-        return self::$self;
+        return static::$self;
     }
     public function clear() {
         

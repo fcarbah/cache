@@ -41,11 +41,11 @@ class RedisCache implements Contracts\Cache {
     }
     
     public static function getInstance($server,$port=6379,$scheme='tcp',array $connOptions=[]){
-        if(self::$self ==null){
-            self::$self = new RedisCache($server, $port, $scheme, $connOptions);
+        if(static::$self ==null){
+            static::$self = new RedisCache($server, $port, $scheme, $connOptions);
         }
         
-        return self::$self;
+        return static::$self;
     }
     
     public function clear() {
