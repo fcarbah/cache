@@ -259,7 +259,7 @@ class FileCache implements ICache
     protected function removeFile($filepath)
     {
         if (file_exists($filepath)) {
-            return $this->removeFile($filepath);
+            return unlink($filepath);
         }
         return false;
     }
