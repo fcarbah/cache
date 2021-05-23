@@ -116,7 +116,7 @@ class RedisCache implements ICache
 
         $obj = unserialize($data);
 
-        return $obj->data;
+        return $obj->filepath;
     }
 
     /**

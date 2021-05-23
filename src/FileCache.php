@@ -1,145 +1,96 @@
 <?php
 
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 namespace Feather\Cache;
 
 use Feather\Cache\CacheObject;
 
 /**
- * Description of Cache
+ * Description of FCache
  *
  * @author fcarbah
  */
 class FileCache implements ICache
 {
 
-    protected $cachePath;
-    protected $filePath;
-    protected $keysPath;
-    protected $keys;
-    protected $file;
-    protected $lastUpdated;
-    protected $lastRead;
-    protected $cacheLoaded = false;
+    protected $basePath;
+    protected $keysFilename = 'feather_cache_keys';
+    protected $keys = [];
     private static $self;
 
-    /**
-     *
-     * @param string $cachePath
-     * @throws CacheException
-     */
-    private function __construct($cachePath)
+    private function __construct($cacheDir)
     {
-
-        $this->keys = array();
-        $this->file = array();
-
-        $this->cachePath = strripos($cachePath, '/') === strlen($cachePath) - 1 ? $cachePath : $cachePath . '/';
-
-        $this->filePath = $this->cachePath . 'feather_cache';
-        $this->keysPath = $this->cachePath . 'feather_cache_keys';
-
-        if (!is_dir($this->cachePath)) {
-            throw new CacheException($cachePath . ' is not a directory', 100);
-        }
-
-        if (!is_writable($this->cachePath)) {
-            throw new CacheException($cachePath . ' is not a writeable directory', 101);
-        }
-
+        $this->validateCacheDirectory($cacheDir);
+        $this->basePath = strripos($cacheDir, '/') === strlen($cacheDir) - 1 ? $cacheDir : $cacheDir . '/';
         $this->init();
-
-        //$this->readFile();
     }
 
     /**
      *
-     * @param string $cachePath
-     * @return \Feather\Cache\ICache
+     * @param type $cacheDir
+     * @return \Feather\Cache\FileCache
      */
-    public static function getInstance($cachePath)
+    public static function getInstance($cacheDir)
     {
         if (static::$self == null) {
-            static::$self = new FileCache($cachePath);
+            static::$self = new FileCache($cacheDir);
         }
-
         return static::$self;
     }
 
-    /**
-     *
-     * @return boolean
-     */
     public function clear()
     {
-        $this->keys = array();
-        $this->file = array();
-        $this->write();
+        foreach ($this->keys as $cacheKey) {
+            unlink($cacheKey->getFilePath());
+        }
+        $this->keys = [];
+        $this->updateMetaData();
         return true;
     }
 
-    /**
-     *
-     * @param string $key
-     * @return boolean
-     */
     public function delete($key)
     {
+        $fkey = $this->formatKey($key);
+        $cacheKey = $this->keys[$fkey] ?? null;
 
-        $index = array_search($key, $this->keys);
-
-        if ($index === false) {
-            return false;
+        if ($cacheKey && unlink($cacheKey->getFilepath())) {
+            unset($this->keys[$fkey]);
+            $this->updateMetaData();
+            return true;
         }
 
-        $this->readFile();
-
-        unset($this->keys[$index]);
-        unset($this->file[$index]);
-
-        $this->keys = array_values($this->keys);
-        $this->file = array_values($this->file);
-
-        $this->write();
-        $this->closeFile();
-        return true;
+        return false;
     }
 
-    /**
-     *
-     * @param string $key
-     * @param boolean $remove
-     * @return mixed
-     */
+    public function forever($key, $value)
+    {
+        return $this->set($key, $value, -1);
+    }
+
     public function get($key, $remove = false)
     {
+        $fkey = $this->formatKey($key);
+        $val = null;
+        try {
+            $cacheKey = $this->keys[$fkey] ?? null;
 
-        $index = array_search($key, $this->keys);
+            if ($cacheKey == null) {
+                return null;
+            }
 
-        if ($index === false) {
-            return null;
+            if ($cacheKey->isExpired()) {
+                $remove = true;
+            } else {
+                $val = $this->loadValue($cacheKey->getFilepath());
+            }
+
+            if ($remove) {
+                $this->delete($key);
+            }
+
+            return $val;
+        } catch (\Exception $ex) {
+            return $val;
         }
-
-        $this->readFile();
-
-        $obj = unserialize($this->file[$index]);
-
-        if ($obj->isExpired()) {
-            $this->delete($key);
-            return null;
-        }
-
-        if ($remove) {
-            $this->delete($key);
-        }
-
-        $this->closeFile();
-
-        return $obj->data;
     }
 
     /**
@@ -152,100 +103,131 @@ class FileCache implements ICache
     public function set($key, $value, $expires = 300)
     {
 
-        $index = array_search($key, $this->keys);
-
-        if ($index === false) {
-            $obj = new CacheObject($key, $value, $expires);
-            $this->file[] = serialize($obj);
-            $this->keys[] = $key;
-            $this->write();
+        if ($value === null) {
             return true;
         }
 
-        return $this->update($key, $value);
+        $fkey = $this->formatKey($key);
+
+        if (isset($this->keys[$fkey])) {
+            return $this->update($key, $value);
+        }
+
+        $filepath = $this->getCacheFilepath($fkey);
+        $cacheKey = new CacheKey($fkey);
+        $cacheKey->setExpire($expires)
+                ->setFilepath($filepath);
+
+        if ($this->write($filepath, $value)) {
+            $this->keys[$fkey] = $cacheKey;
+            $this->updateMetaData();
+            return true;
+        }
+        return false;
+    }
+
+    public function update($key, $value)
+    {
+
+        if ($value === null) {
+            return $this->delete($key);
+        }
+
+        $fkey = $this->formatKey($key);
+        $filepath = $this->getCacheFilepath($fkey);
+
+        if (!isset($this->keys[$fkey])) {
+            return false;
+        }
+
+        $cacheKey = $this->keys[$fkey];
+        $cacheKey->setExpire($cacheKey->getExpire());
+
+        if ($this->write($filepath, $value)) {
+            $this->keys[$fkey] = $cacheKey;
+            $this->updateMetaData();
+            return true;
+        }
+
+        return false;
     }
 
     /**
      *
      * @param string $key
-     * @param mixed $value
-     * @return boolean
+     * @return string
      */
-    public function update($key, $value)
+    protected function formatKey($key)
     {
-
-        $index = array_search($key, $this->keys);
-
-        $object = unserialize($this->file[$index]);
-
-        $updateObj = new CacheObject($key, $value, $object->expire);
-
-        $this->file[$index] = serialize($updateObj);
-
-        $this->write();
-
-        return true;
+        return md5($key);
     }
 
-    /**
-     *
-     */
+    protected function getCacheFilepath($fkey)
+    {
+        return $this->basePath . $fkey;
+    }
+
     protected function init()
     {
+        $this->loadKeys();
 
-        $f = fopen($this->filePath, 'a+');
-        fclose($f);
-
-        $kf = fopen($this->keysPath, 'a+');
-        fclose($kf);
-
-        $this->keys = file($this->keysPath);
-
-        if (!$this->keys) {
-            $this->keys = array();
-        }
-    }
-
-    /**
-     * Read cache data from file
-     */
-    protected function readFile()
-    {
-        if (!$this->cacheLoaded) {
-            $this->file = file($this->filePath);
-            if (!$this->file) {
-                $this->file = array();
-            } else {
-                $this->cacheLoaded = true;
+        foreach ($this->keys as $cacheKey) {
+            if ($cacheKey->isExpired() && unlink($cacheKey->getFilepath())) {
+                unset($this->keys[$cacheKey->getKey()]);
             }
         }
     }
 
-    public function closeFile()
+    protected function loadKeys()
     {
-        $this->file = [];
-        $this->cacheLoaded = false;
+        $absPath = $this->basePath . $this->keysFilename;
+        $file = fopen($absPath, 'a+');
+        fclose($file);
+
+        $str = file_get_contents($absPath);
+
+        if ($str) {
+            $this->keys = unserialize(base64_decode($str));
+        }
     }
 
-    /**
-     *
-     * @return boolean
-     * @throws CacheException
-     */
-    protected function write()
+    protected function loadValue($filepath)
     {
-        try {
-            $string = implode(PHP_EOL, $this->file);
-            file_put_contents($this->filePath, $string);
 
-            $keyStr = implode(PHP_EOL, $this->keys);
-            file_put_contents($this->keysPath, $keyStr);
-            $this->closeFile();
-            return true;
-        } catch (\Exception $e) {
-            $this->closeFile();
-            throw new CacheException($e->getMessage(), 105);
+        if (!file_exists($filepath)) {
+            return null;
         }
+
+        $str = file_get_contents($filepath);
+
+        if ($str) {
+            return unserialize(base64_decode($str));
+        }
+
+        return null;
+    }
+
+    protected function updateMetaData()
+    {
+        $keys = base64_encode(serialize($this->keys));
+        file_put_contents($this->basePath . $this->keysFilename, $keys);
+    }
+
+    protected function validateCacheDirectory($cachePath)
+    {
+        if (!is_dir($cachePath)) {
+            throw new CacheException($cachePath . ' is not a directory', 100);
+        }
+
+        if (!is_writable($cachePath)) {
+            throw new CacheException($cachePath . ' is not a writeable directory', 101);
+        }
+    }
+
+    protected function write($filepath, $data)
+    {
+        $value = base64_encode(serialize($data));
+        return file_put_contents($filepath, $value);
     }
 
 }

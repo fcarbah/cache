@@ -114,7 +114,7 @@ class DatabaseCache implements ICache
             return null;
         }
 
-        return $object->data;
+        return $object->filepath;
     }
 
     /**
