@@ -27,8 +27,6 @@ function testFileCache()
     $cache->set('temp', 'tuesday', -1);
     $cache->set('temp2', 'west', 10);
 
-    var_dump(dirname(__FILE__), @scandir(__DIR__));
-
     var_dump('temp should be tuesday: ' . $cache->get('temp'));
 
     var_dump('temp2 should be west: ' . $cache->get('temp2', true));
