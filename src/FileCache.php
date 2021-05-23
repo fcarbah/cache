@@ -37,22 +37,31 @@ class FileCache implements ICache
         return static::$self;
     }
 
+    /**
+     * Empty cache including items cache forever
+     * @return boolean
+     */
     public function clear()
     {
         foreach ($this->keys as $cacheKey) {
-            unlink($cacheKey->getFilePath());
+            $this->removeFile($cacheKey->getFilePath());
         }
         $this->keys = [];
         $this->updateMetaData();
         return true;
     }
 
+    /**
+     * Deletes an item $key from cache
+     * @param string $key
+     * @return boolean
+     */
     public function delete($key)
     {
         $fkey = $this->formatKey($key);
         $cacheKey = $this->keys[$fkey] ?? null;
 
-        if ($cacheKey && unlink($cacheKey->getFilepath())) {
+        if ($cacheKey && $this->removeFile($cacheKey->getFilepath())) {
             unset($this->keys[$fkey]);
             $this->updateMetaData();
             return true;
@@ -61,11 +70,23 @@ class FileCache implements ICache
         return false;
     }
 
+    /**
+     * Add value to cache forever by $key until cache is cleard
+     * @param string $key
+     * @param mixed $value
+     * @return boolean
+     */
     public function forever($key, $value)
     {
         return $this->set($key, $value, -1);
     }
 
+    /**
+     * Retrieves the value cached by $key
+     * @param string $key
+     * @param boolean $remove
+     * @return mixed
+     */
     public function get($key, $remove = false)
     {
         $fkey = $this->formatKey($key);
@@ -94,10 +115,10 @@ class FileCache implements ICache
     }
 
     /**
-     *
+     * Adds a value to cache based on $key
      * @param string $key
      * @param mixed $value
-     * @param int $expires
+     * @param int $expires Number of seconds to keep data in cache
      * @return boolean
      */
     public function set($key, $value, $expires = 300)
@@ -126,6 +147,12 @@ class FileCache implements ICache
         return false;
     }
 
+    /**
+     * Update value of existing cache key
+     * @param string $key
+     * @param mixed $value
+     * @return boolean
+     */
     public function update($key, $value)
     {
 
@@ -153,7 +180,7 @@ class FileCache implements ICache
     }
 
     /**
-     *
+     * generates unique key based on key user supplied
      * @param string $key
      * @return string
      */
@@ -162,22 +189,33 @@ class FileCache implements ICache
         return md5($key);
     }
 
+    /**
+     * Get absolute path of cache file
+     * @param string $fkey
+     * @return string
+     */
     protected function getCacheFilepath($fkey)
     {
         return $this->basePath . $fkey;
     }
 
+    /**
+     * Initializes cache and removes expired keys
+     */
     protected function init()
     {
         $this->loadKeys();
 
         foreach ($this->keys as $cacheKey) {
-            if ($cacheKey->isExpired() && unlink($cacheKey->getFilepath())) {
+            if ($cacheKey->isExpired() && $this->removeFile($cacheKey->getFilepath())) {
                 unset($this->keys[$cacheKey->getKey()]);
             }
         }
     }
 
+    /**
+     * loads cache keys
+     */
     protected function loadKeys()
     {
         $absPath = $this->basePath . $this->keysFilename;
@@ -187,10 +225,16 @@ class FileCache implements ICache
         $str = file_get_contents($absPath);
 
         if ($str) {
-            $this->keys = unserialize(base64_decode($str));
+            $keys = unserialize(base64_decode($str));
+            $this->keys = is_array($keys) ? $keys : [];
         }
     }
 
+    /**
+     *
+     * @param string $filepath
+     * @return mixed
+     */
     protected function loadValue($filepath)
     {
 
@@ -207,12 +251,33 @@ class FileCache implements ICache
         return null;
     }
 
+    /**
+     *
+     * @param string $filepath
+     * @return boolean
+     */
+    protected function removeFile($filepath)
+    {
+        if (file_exists($filepath)) {
+            return $this->removeFile($filepath);
+        }
+        return false;
+    }
+
+    /**
+     *
+     */
     protected function updateMetaData()
     {
         $keys = base64_encode(serialize($this->keys));
         file_put_contents($this->basePath . $this->keysFilename, $keys);
     }
 
+    /**
+     *
+     * @param string $cachePath
+     * @throws CacheException
+     */
     protected function validateCacheDirectory($cachePath)
     {
         if (!is_dir($cachePath)) {
@@ -224,6 +289,12 @@ class FileCache implements ICache
         }
     }
 
+    /**
+     *
+     * @param string $filepath
+     * @param mixed $data
+     * @return int
+     */
     protected function write($filepath, $data)
     {
         $value = base64_encode(serialize($data));
