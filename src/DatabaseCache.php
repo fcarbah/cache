@@ -114,7 +114,7 @@ class DatabaseCache implements ICache
             return null;
         }
 
-        return $object->filepath;
+        return $object->data;
     }
 
     /**
@@ -131,7 +131,7 @@ class DatabaseCache implements ICache
             return $this->update($key, $value);
         }
 
-        $obj = new CacheObject($key, $value, $expires);
+        $obj = new CacheObject($key, $value, (int) $expires);
 
         $sql = 'insert into ' . $this->table . ' (cache_key,value) values(:key,:val)';
 
@@ -152,9 +152,10 @@ class DatabaseCache implements ICache
      *
      * @param string $key
      * @param mixed $value
+     * @param int $expires
      * @return boolean
      */
-    public function update($key, $value)
+    public function update($key, $value, $expires = null)
     {
 
         $data = isset($this->data[$key]) ? $this->data[$key] : null;
@@ -167,7 +168,8 @@ class DatabaseCache implements ICache
 
         $obj = $data;
 
-        $updObj = new CacheObject($key, $value, $obj->expire);
+        $expire = $expires !== null ? (int) $expires : $obj->expire;
+        $updObj = new CacheObject($key, $value, $expire);
 
         $stmt = $this->db->prepare($sql);
 

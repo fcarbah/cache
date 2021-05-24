@@ -22,5 +22,5 @@ interface ICache
 
     public function delete($key);
 
-    public function update($key, $value);
+    public function update($key, $value, $expires = null);
 }

@@ -136,7 +136,7 @@ class FileCache implements ICache
 
         $filepath = $this->getCacheFilepath($fkey);
         $cacheKey = new CacheKey($fkey);
-        $cacheKey->setExpire($expires)
+        $cacheKey->setExpire((int) $expires)
                 ->setFilepath($filepath);
 
         if ($this->write($filepath, $value)) {
@@ -151,9 +151,10 @@ class FileCache implements ICache
      * Update value of existing cache key
      * @param string $key
      * @param mixed $value
+     * @param int $expires
      * @return boolean
      */
-    public function update($key, $value)
+    public function update($key, $value, $expires = null)
     {
 
         if ($value === null) {
@@ -168,7 +169,8 @@ class FileCache implements ICache
         }
 
         $cacheKey = $this->keys[$fkey];
-        $cacheKey->setExpire($cacheKey->getExpire());
+        $expire = $expires !== null ? (int) $expires : $cacheKey->getExpire();
+        $cacheKey->setExpire($expire);
 
         if ($this->write($filepath, $value)) {
             $this->keys[$fkey] = $cacheKey;

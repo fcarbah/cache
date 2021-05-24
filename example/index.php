@@ -98,7 +98,7 @@ function testRedisCache()
 
 testFileCache();
 
-testDbCache();
+//testDbCache();
 
 testRedisCache();
 

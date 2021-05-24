@@ -100,7 +100,7 @@ class RedisCache implements ICache
      *
      * @param string $key
      * @param boolean $remove
-     * @return type
+     * @return mixed
      */
     public function get($key, $remove = false)
     {
@@ -116,7 +116,12 @@ class RedisCache implements ICache
 
         $obj = unserialize($data);
 
-        return $obj->filepath;
+        if ($obj->isExpired()) {
+            $this->delete($key);
+            return null;
+        }
+
+        return $obj->data;
     }
 
     /**
@@ -130,9 +135,12 @@ class RedisCache implements ICache
     {
 
         if (!$this->client->exists($key)) {
-            $object = new CacheObject($key, $value, $expires);
+            $object = new CacheObject($key, $value, (int) $expires);
             $this->client->set($key, serialize($object));
-            $this->client->expireAt($key, time() + $expires);
+            if ($expires === -1) {
+                $this->client->persist($key);
+            }
+            $this->client->expireAt($key, time() + (int) $expires);
             $this->keys[] = $key;
             return true;
         }
@@ -143,14 +151,21 @@ class RedisCache implements ICache
      *
      * @param string $key
      * @param mixed $value
+     * @param int $expires
      * @return boolean
      */
-    public function update($key, $value)
+    public function update($key, $value, $expires = null)
     {
 
         if ($this->client->exists($key)) {
+            $cacheObject = $this->client->get($key);
+            if ($expires === null && $cacheObject) {
+                $cacheObject = unserialize($cacheObject);
+                $expires = $cacheObject->expire;
+            }
+
             $this->delete($key);
-            $this->set($key, $value);
+            $this->set($key, $value, $expires);
             return true;
         }
         return false;
