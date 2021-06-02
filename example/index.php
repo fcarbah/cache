@@ -8,17 +8,6 @@ use Feather\Cache\FileCache;
 use Feather\Cache\DatabaseCache;
 use Feather\Cache\RedisCache;
 
-/**
- * for database cache create a table named feather_cache
- * CREATE TABLE `feather_cache` (
-  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `cache_key` varchar(255) NOT NULL,
-  `value` mediumtext NOT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `cache_key` (`cache_key`)
-  )
-
- */
 function testFileCache()
 {
 
@@ -49,9 +38,9 @@ function testFileCache()
 function testDbCache()
 {
     $dbconfig = [
-        'dsn' => 'mysql:host=localhost;dbname=test',
+        'dsn' => 'mysql:host=localhost;dbname=feather',
         'user' => 'root',
-        'password' => ''
+        'password' => '',
     ];
 
     $dbCache = DatabaseCache::getInstance($dbconfig);
@@ -69,11 +58,13 @@ function testDbCache()
 
     var_dump('dbtemp was updated to ten: ' . $dbCache->get('dbtemp'));
 
+    $dbCache->delete('dbtemp2');
+
     var_dump('dbtemp2 was removed and should be null: ', $dbCache->get('dbtemp2'));
 
     $dbCache->clear();
 
-    var_dump('dbtemp 2 should be null. cache was cleared: ', $dbCache->get('dbtemp'));
+    var_dump('dbtemp should be null. cache was cleared: ', $dbCache->get('dbtemp'));
 }
 
 function testRedisCache()
@@ -100,6 +91,6 @@ testFileCache();
 
 //testDbCache();
 
-testRedisCache();
+//testRedisCache();
 
 

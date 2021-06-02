@@ -15,24 +15,39 @@ namespace Feather\Cache;
 class CacheObject
 {
 
+    /** @var string * */
     protected $key;
+
+    /** @var int * */
     protected $addTime;
-    protected $expireTime;
+
+    /** @var int * */
+    protected $expireAt;
+
+    /** @var mixed * */
     protected $data;
+
+    /** @var int * */
     protected $expire;
 
-    public function __construct($key, $data, $expireTime)
+    /**
+     *
+     * @param string $key
+     * @param mixed $data
+     * @param int $expire Expire time in seconds
+     */
+    public function __construct($key, $data, $expire)
     {
         $this->key = $key;
         $this->data = $data;
         $this->addTime = time();
-        $this->expire = intval($expireTime);
-        $this->expireTime = time() + intval($expireTime);
+        $this->expire = intval($expire);
+        $this->expireAt = time() + intval($expire);
     }
 
     public function isExpired()
     {
-        return $this->expire !== -1 && time() > $this->expireTime;
+        return $this->expire !== -1 && time() > $this->expireAt;
     }
 
     public function __get($name)

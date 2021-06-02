@@ -7,6 +7,8 @@
  */
 namespace Feather\Cache;
 
+use Feather\Support\Database\Dbal;
+
 /**
  * Description of DatabaseCache
  *
@@ -15,28 +17,48 @@ namespace Feather\Cache;
 class DatabaseCache implements ICache
 {
 
+    /** @var \Feather\Support\Database\Dbal * */
     protected $db;
+
+    /** @var array * */
     protected $config;
-    protected $table = 'feather_cache';
+
+    /** @var string * */
+    protected $table = 'cache';
+
+    /** @var string * */
     protected $data;
+
+    /** @var string * */
     protected $lastUpdated;
+
+    /** @var string * */
     protected $lastRead;
+
+    /** @var \Feather\Cache\DatabaseCache * */
     private static $self;
 
     private function __construct($config)
     {
 
         try {
+
             $this->data = array();
+
             $this->config = $config;
-            $this->connect();
-            $this->load();
+
+            $this->init();
         } catch (\Exception $e) {
             throw new CacheException('Could not connect to database! ' . $e->getMessage(), 200);
         }
     }
 
-    public static function getInstance($config)
+    /**
+     *
+     * @param array $config
+     * @return \Feather\Cache\DatabaseCache
+     */
+    public static function getInstance(array $config)
     {
         if (static::$self == null) {
             static::$self = new DatabaseCache($config);
@@ -54,7 +76,7 @@ class DatabaseCache implements ICache
 
         $this->connect();
 
-        $sql = 'truncate ' . $this->table;
+        $sql = 'TRUNCATE ' . $this->table;
 
         $stmt = $this->db->prepare($sql);
 
@@ -76,11 +98,11 @@ class DatabaseCache implements ICache
 
         $this->connect();
 
-        $sql = 'delete from ' . $this->table . ' where cache_key=:ckey';
+        $sql = 'DELETE FROM ' . $this->table . ' WHERE cache_key = :key';
 
         $stmt = $this->db->prepare($sql);
 
-        $stmt->bindValue(':ckey', $key);
+        $stmt->bindValue(':key', $key, \PDO::PARAM_STR);
 
         if ($stmt->execute()) {
             unset($this->data[$key]);
@@ -99,11 +121,15 @@ class DatabaseCache implements ICache
     public function get($key, $remove = false)
     {
 
-        if (!isset($this->data[$key])) {
-            return null;
+        if (isset($this->data[$key])) {
+            return $this->data[$key]->data;
         }
 
-        $object = $this->data[$key];
+        $object = $this->findKey($key);
+
+        if (!$object) {
+            return null;
+        }
 
         if ($remove) {
             $this->delete($key);
@@ -113,6 +139,8 @@ class DatabaseCache implements ICache
             $this->delete($key);
             return null;
         }
+
+        $this->data[$key] = $object;
 
         return $object->data;
     }
@@ -127,21 +155,24 @@ class DatabaseCache implements ICache
     public function set($key, $value, $expires = 300)
     {
 
-        if (isset($this->data[$key])) {
-            return $this->update($key, $value);
-        }
-
         $obj = new CacheObject($key, $value, (int) $expires);
 
-        $sql = 'insert into ' . $this->table . ' (cache_key,value) values(:key,:val)';
+        $expireAt = $expires == -1 ? 0 : $obj->expireAt;
+
+        $sql = "INSERT INTO $this->table (cache_key, cache_data, expire_at) values(:key, :val, :expire_at)
+                ON DUPLICATE KEY UPDATE
+                cache_data = values(cache_data),
+                expire_at = values(expire_at)
+                ";
 
         $stmt = $this->db->prepare($sql);
 
-        $stmt->bindValue(':key', $key);
-        $stmt->bindValue(':val', serialize($obj));
+        $stmt->bindValue(':key', $key, \PDO::PARAM_STR);
+        $stmt->bindValue(':val', serialize($obj), \PDO::PARAM_STR);
+        $stmt->bindValue(':expire_at', $expireAt, \PDO::PARAM_INT);
 
         if ($stmt->execute()) {
-            $this->setData($key, $obj);
+            $this->data[$key] = $obj;
             return true;
         }
 
@@ -157,31 +188,19 @@ class DatabaseCache implements ICache
      */
     public function update($key, $value, $expires = null)
     {
+        if (isset($this->data[$key])) {
+            $obj = $this->data[$key];
+        } else {
+            $obj = $this->findKey($key);
+        }
 
-        $data = isset($this->data[$key]) ? $this->data[$key] : null;
-
-        if (!$data) {
+        if (!$obj) {
             return false;
         }
 
-        $sql = 'update ' . $this->table . ' set value=:val where cache_key=:key';
-
-        $obj = $data;
-
         $expire = $expires !== null ? (int) $expires : $obj->expire;
-        $updObj = new CacheObject($key, $value, $expire);
 
-        $stmt = $this->db->prepare($sql);
-
-        $stmt->bindValue(':key', $key);
-        $stmt->bindValue(':val', serialize($updObj));
-
-        if ($stmt->execute()) {
-            $this->setData($key, $updObj);
-            return true;
-        }
-
-        return false;
+        return $this->set($key, $value, $expire);
     }
 
     /**
@@ -190,40 +209,63 @@ class DatabaseCache implements ICache
     protected function connect()
     {
         if (!$this->db) {
-            $this->db = new \PDO($this->config['dsn'], $this->config['user'], $this->config['password']);
+            $options = $this->config['pdoOptions'] ?? [];
+            $this->db = new Dbal($this->config['dsn'], $this->config['user'], $this->config['password'], $options);
+            $this->db->connect();
             $this->db->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
         }
     }
 
     /**
-     * Loads cache
+     *
+     * @param string $key Cache key
+     * @return \Feather\Cache\CacheObject|null
      */
-    protected function load()
+    protected function findKey($key)
     {
 
         $this->connect();
-
-        $sql = 'select * from ' . $this->table;
+        $sql = "SELECT cache_key, cache_data, expire_at FROM $this->table WHERE cache_key = :key";
 
         $stmt = $this->db->prepare($sql);
-
+        $stmt->bindValue(':key', $key, \PDO::PARAM_STR);
         $stmt->execute();
 
-        $data = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC);
 
-        foreach ($data as $row) {
-            $this->data[$row['cache_key']] = unserialize($row['value']);
+        if ($row) {
+            return unserialize($row['cache_data']);
         }
+
+        return null;
     }
 
     /**
-     *
-     * @param string $key
-     * @param mixed $object
+     * Loads cache
      */
-    protected function setData($key, $object)
+    protected function init()
     {
-        $this->data[$key] = $object;
+        $this->table = $this->config['table'] ?? $this->table;
+        $this->connect();
+        $this->removeExpireData();
+    }
+
+    /**
+     * Remove expire items from cache
+     * @return int
+     */
+    protected function removeExpireData()
+    {
+
+        $sql = "DELETE FROM $this->table WHERE expire_at != 0 && expire_at <= :expireAt";
+
+        $time = time();
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->bindValue(':expireAt', $time, \PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->rowCount();
     }
 
 }
