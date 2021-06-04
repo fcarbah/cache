@@ -31,7 +31,7 @@ class RedisCache implements ICache
     protected $keys = array();
 
     /** @var string * */
-    protected $namespace = "__feather";
+    protected $namespace = "__fc_redis";
 
     /**
      *
