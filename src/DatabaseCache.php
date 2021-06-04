@@ -104,7 +104,7 @@ class DatabaseCache implements ICache
 
         $stmt->bindValue(':key', $key, \PDO::PARAM_STR);
 
-        if ($stmt->execute()) {
+        if ($stmt->execute() && $stmt->rowCount() == 1) {
             unset($this->data[$key]);
             return true;
         }
@@ -122,17 +122,13 @@ class DatabaseCache implements ICache
     {
 
         if (isset($this->data[$key])) {
-            return $this->data[$key]->data;
+            $object = $this->data[$key];
+        } else {
+            $object = $this->findKey($key);
         }
-
-        $object = $this->findKey($key);
 
         if (!$object) {
             return null;
-        }
-
-        if ($remove) {
-            $this->delete($key);
         }
 
         if ($object->isExpired()) {
@@ -140,9 +136,27 @@ class DatabaseCache implements ICache
             return null;
         }
 
-        $this->data[$key] = $object;
+        if ($remove) {
+            $this->delete($key);
+        } else {
+            $this->data[$key] = $object;
+        }
 
         return $object->data;
+    }
+
+    /**
+     * Get all the keys in cache
+     * @return array
+     */
+    public function keys(): array
+    {
+        $sql = "SELECT cache_key FROM $this->table";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute();
+
+        return $stmt->fetchAll(\PDO::FETCH_COLUMN);
     }
 
     /**

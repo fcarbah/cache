@@ -1,10 +1,5 @@
 <?php
 
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 namespace Feather\Cache;
 
 use Predis\Client;
@@ -17,12 +12,26 @@ use Predis\Client;
 class RedisCache implements ICache
 {
 
+    /** @var string * */
     protected $scheme = 'tcp';
+
+    /** @var string * */
     protected $server;
+
+    /** @var int * */
     protected $port = 3379;
+
+    /** @var \Predis\Client * */
     protected $client;
+
+    /** @var \Feather\Cache\RedisCache * */
     private static $self;
+
+    /** @var array * */
     protected $keys = array();
+
+    /** @var string * */
+    protected $namespace = "__feather";
 
     /**
      *
@@ -72,7 +81,8 @@ class RedisCache implements ICache
      */
     public function clear()
     {
-        if ($this->client->del($this->keys)) {
+        $pattern = $this->namespace . '*';
+        if ($this->client->del($pattern)) {
             $this->keys = array();
             return true;
         }
@@ -87,7 +97,9 @@ class RedisCache implements ICache
      */
     public function delete($key)
     {
-        if ($this->client->del([$key])) {
+        $fkey = $this->formatKey($key);
+
+        if ($this->client->del([$fkey])) {
             $indx = array_search($key, $this->keys);
             unset($this->keys[$indx]);
             $this->keys = array_values($this->keys);
@@ -104,7 +116,7 @@ class RedisCache implements ICache
      */
     public function get($key, $remove = false)
     {
-        $data = $this->client->get($key);
+        $data = $this->client->get($this->formatKey($key));
 
         if (!$data) {
             return null;
@@ -125,6 +137,22 @@ class RedisCache implements ICache
     }
 
     /**
+     * Get all the keys in cache
+     * @return array
+     */
+    public function keys(): array
+    {
+        $pattern = $this->namespace . '*';
+        $namespace = $this->namespace;
+
+        $keys = $this->client->keys($pattern);
+
+        return array_map(function($item) use($namespace) {
+            return str_replace($namespace, '', $item);
+        }, $keys);
+    }
+
+    /**
      *
      * @param string $key
      * @param mixed $value
@@ -133,18 +161,30 @@ class RedisCache implements ICache
      */
     public function set($key, $value, $expires = 300)
     {
+        $fkey = $this->formatKey($key);
 
-        if (!$this->client->exists($key)) {
+        if (!$this->client->exists($fkey)) {
             $object = new CacheObject($key, $value, (int) $expires);
-            $this->client->set($key, serialize($object));
+            $this->client->set($fkey, serialize($object));
             if ($expires === -1) {
-                $this->client->persist($key);
+                $this->client->persist($fkey);
             }
-            $this->client->expireAt($key, time() + (int) $expires);
+            $this->client->expireAt($fkey, time() + (int) $expires);
             $this->keys[] = $key;
             return true;
         }
         return $this->update($key, $value);
+    }
+
+    /**
+     *
+     * @param string $namespace
+     * @return $this
+     */
+    public function setNamespace(string $namespace)
+    {
+        $this->namespace = $namespace;
+        return $this;
     }
 
     /**
@@ -157,8 +197,10 @@ class RedisCache implements ICache
     public function update($key, $value, $expires = null)
     {
 
-        if ($this->client->exists($key)) {
-            $cacheObject = $this->client->get($key);
+        $fkey = $this->formatKey($key);
+
+        if ($this->client->exists($fkey)) {
+            $cacheObject = $this->client->get($fkey);
             if ($expires === null && $cacheObject) {
                 $cacheObject = unserialize($cacheObject);
                 $expires = $cacheObject->expire;
@@ -169,6 +211,11 @@ class RedisCache implements ICache
             return true;
         }
         return false;
+    }
+
+    protected function formatKey($key)
+    {
+        return $this->namespace . $key;
     }
 
 }

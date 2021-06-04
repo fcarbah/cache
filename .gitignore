@@ -3,3 +3,4 @@ nbproject/
 vendor/
 example/*
 !example/index.php
+.phpunit*

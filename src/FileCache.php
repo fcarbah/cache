@@ -12,9 +12,16 @@ use Feather\Cache\CacheObject;
 class FileCache implements ICache
 {
 
+    /** @var string * */
     protected $basePath;
+
+    /** @var string * */
     protected $keysFilename = 'feather_cache_keys';
+
+    /** @var array * */
     protected $keys = [];
+
+    /** @var \Feather\Cache\FileCache * */
     private static $self;
 
     private function __construct($cacheDir)
@@ -59,7 +66,7 @@ class FileCache implements ICache
     public function delete($key)
     {
         $fkey = $this->formatKey($key);
-        $cacheKey = $this->keys[$fkey] ?? null;
+        $cacheKey = $this->keys[$key] ?? null;
 
         if ($cacheKey && $this->removeFile($cacheKey->getFilepath())) {
             unset($this->keys[$fkey]);
@@ -71,7 +78,7 @@ class FileCache implements ICache
     }
 
     /**
-     * Add value to cache forever by $key until cache is cleard
+     * Add value to cache forever by $key until cache is cleared
      * @param string $key
      * @param mixed $value
      * @return boolean
@@ -92,7 +99,7 @@ class FileCache implements ICache
         $fkey = $this->formatKey($key);
         $val = null;
         try {
-            $cacheKey = $this->keys[$fkey] ?? null;
+            $cacheKey = $this->keys[$key] ?? null;
 
             if ($cacheKey == null) {
                 return null;
@@ -115,6 +122,15 @@ class FileCache implements ICache
     }
 
     /**
+     * Get all the keys in cache
+     * @return array
+     */
+    public function keys(): array
+    {
+        return array_keys($this->keys);
+    }
+
+    /**
      * Adds a value to cache based on $key
      * @param string $key
      * @param mixed $value
@@ -130,17 +146,13 @@ class FileCache implements ICache
 
         $fkey = $this->formatKey($key);
 
-        if (isset($this->keys[$fkey])) {
-            return $this->update($key, $value);
-        }
-
         $filepath = $this->getCacheFilepath($fkey);
         $cacheKey = new CacheKey($fkey);
         $cacheKey->setExpire((int) $expires)
                 ->setFilepath($filepath);
 
         if ($this->write($filepath, $value)) {
-            $this->keys[$fkey] = $cacheKey;
+            $this->keys[$key] = $cacheKey;
             $this->updateMetaData();
             return true;
         }
@@ -164,21 +176,14 @@ class FileCache implements ICache
         $fkey = $this->formatKey($key);
         $filepath = $this->getCacheFilepath($fkey);
 
-        if (!isset($this->keys[$fkey])) {
+        if (!isset($this->keys[$key])) {
             return false;
         }
 
-        $cacheKey = $this->keys[$fkey];
+        $cacheKey = $this->keys[$key];
         $expire = $expires !== null ? (int) $expires : $cacheKey->getExpire();
-        $cacheKey->setExpire($expire);
 
-        if ($this->write($filepath, $value)) {
-            $this->keys[$fkey] = $cacheKey;
-            $this->updateMetaData();
-            return true;
-        }
-
-        return false;
+        return $this->set($key, $value, $expire);
     }
 
     /**

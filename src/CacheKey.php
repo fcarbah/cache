@@ -86,6 +86,7 @@ class CacheKey
             $this->expire = -1;
             $this->expireAt = null;
         } else {
+            $this->expire = $expire;
             $this->expireAt = time() + $expire;
         }
 
